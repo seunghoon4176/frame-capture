@@ -18,7 +18,7 @@ def resource_path(relative_path):
         base_path = os.path.abspath(".")
     return os.path.join(base_path, relative_path)
 
-__version__ = '1.0.0'  # 앱 버전
+__version__ = '1.0.1'  # 앱 버전
 
 def capture_frame(video_path, time_sec, resolution):
     cap = cv2.VideoCapture(video_path)
@@ -62,7 +62,32 @@ class FrameExporterApp:
         self.create_menu()
         self.create_widgets()
         # 프로그램 최초 실행 시 자동 업데이트 체크
-        self.root.after(100, self.check_update)
+        self.root.after(100, self.check_update_silent)
+
+    def check_update_silent(self):
+        """
+        프로그램 시작 시: 업데이트가 있을 때만 안내, 최신이면 아무 메시지도 띄우지 않음
+        """
+        try:
+            import requests
+        except ImportError:
+            # 조용히 무시
+            return
+        try:
+            api_url = 'https://api.github.com/repos/seunghoon4176/frame-capture/releases/latest'
+            resp = requests.get(api_url, timeout=5)
+            if resp.status_code != 200:
+                return
+            data = resp.json()
+            latest_ver = data.get('tag_name', '').lstrip('v')
+            release_url = data.get('html_url', 'https://github.com/seunghoon4176/frame-capture/releases')
+            if not latest_ver:
+                return
+            if latest_ver != __version__:
+                if messagebox.askyesno('업데이트 확인', f'새 버전이 있습니다! (현재: v{__version__}, 최신: v{latest_ver})\n업데이트 페이지를 여시겠습니까?'):
+                    webbrowser.open(release_url)
+        except Exception:
+            pass
 
     def create_menu(self):
         menubar = tk.Menu(self.root)
