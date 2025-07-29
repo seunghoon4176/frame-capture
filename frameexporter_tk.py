@@ -1,9 +1,24 @@
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
+
 import os
+import sys
+import webbrowser
 import cv2
 import numpy as np
+def resource_path(relative_path):
+    """
+    PyInstaller 환경에서 리소스 파일 경로를 안전하게 반환
+    개발 환경에서는 상대경로, 빌드 환경에서는 _MEIPASS 사용
+    """
+    try:
+        base_path = sys._MEIPASS
+    except AttributeError:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
+
+__version__ = '1.0.0'  # 앱 버전
 
 def capture_frame(video_path, time_sec, resolution):
     cap = cv2.VideoCapture(video_path)
@@ -39,11 +54,60 @@ class FrameExporterApp:
         self.root.title('프레임 캡처')
         # 아이콘 적용 (icon.ico가 있으면 적용, 없으면 무시)
         try:
-            self.root.iconbitmap('icon.ico')
+            icon_path = resource_path('icon.ico')
+            self.root.iconbitmap(icon_path)
         except Exception:
             pass
         self.video_path = ''
+        self.create_menu()
         self.create_widgets()
+        # 프로그램 최초 실행 시 자동 업데이트 체크
+        self.root.after(100, self.check_update)
+
+    def create_menu(self):
+        menubar = tk.Menu(self.root)
+        self.root.config(menu=menubar)
+        # 도움말 메뉴
+        helpmenu = tk.Menu(menubar, tearoff=0)
+        helpmenu.add_command(label='업데이트 확인', command=self.check_update)
+        helpmenu.add_separator()
+        helpmenu.add_command(label='버전 정보', command=self.show_version)
+        menubar.add_cascade(label='도움말', menu=helpmenu)
+        # 문의 메뉴
+        contactmenu = tk.Menu(menubar, tearoff=0)
+        contactmenu.add_command(label='개발자에게 문의하기', command=self.open_contact_link)
+        menubar.add_cascade(label='문의', menu=contactmenu)
+
+    def open_contact_link(self):
+        url = 'https://open.kakao.com/o/sObJJxJh'
+        webbrowser.open(url)
+
+    def show_version(self):
+        messagebox.showinfo('버전 정보', f'현재 버전: {__version__}')
+
+    def check_update(self):
+        try:
+            import requests
+        except ImportError:
+            messagebox.showwarning('업데이트 확인', 'requests 모듈이 필요합니다.\n명령 프롬프트에서 "pip install requests"를 실행해 주세요.')
+            return
+        try:
+            api_url = 'https://api.github.com/repos/seunghoon4176/frame-capture/releases/latest'
+            resp = requests.get(api_url, timeout=5)
+            if resp.status_code != 200:
+                raise Exception('GitHub API 오류')
+            data = resp.json()
+            latest_ver = data.get('tag_name', '').lstrip('v')
+            release_url = data.get('html_url', 'https://github.com/seunghoon4176/frame-capture/releases')
+            if not latest_ver:
+                raise Exception('최신 버전 정보를 찾을 수 없습니다.')
+            if latest_ver == __version__:
+                messagebox.showinfo('업데이트 확인', f'최신 버전입니다! (v{__version__})')
+            else:
+                if messagebox.askyesno('업데이트 확인', f'새 버전이 있습니다! (현재: v{__version__}, 최신: v{latest_ver})\n업데이트 페이지를 여시겠습니까?'):
+                    webbrowser.open(release_url)
+        except Exception as e:
+            messagebox.showerror('업데이트 확인', f'업데이트 확인에 실패했습니다: {e}')
 
     def create_widgets(self):
         frm = ttk.Frame(self.root, padding=10)
@@ -93,11 +157,14 @@ class FrameExporterApp:
         resolution = self.res_combo.get()
         try:
             frame = capture_frame(self.video_path, time_sec, resolution)
+            # 프로그램과 같은 위치에 저장
+            default_dir = os.path.dirname(sys.executable if getattr(sys, 'frozen', False) else os.path.abspath(__file__))
             save_path = filedialog.asksaveasfilename(
                 title='캡처',
                 defaultextension='.png',
                 filetypes=[('PNG Images', '*.png'), ('JPEG Images', '*.jpg')],
-                initialfile='frame.png'
+                initialfile='frame.png',
+                initialdir=default_dir
             )
             if save_path:
                 # 한글 등 특수문자 파일명 안전하게 변환
@@ -107,7 +174,8 @@ class FrameExporterApp:
                 if ext.lower() != '.png':
                     ext = '.png'
                 safe_base = re.sub(r'[^\w\d_]', '_', os.path.basename(base))
-                safe_path = os.path.join(os.path.dirname(save_path), safe_base + ext)
+                # 저장 경로를 프로그램과 같은 위치로 강제 지정
+                safe_path = os.path.join(default_dir, safe_base + ext)
                 cv2.imwrite(safe_path, frame)
                 messagebox.showinfo('성공', f'캡처된 경로는 {safe_path} 입니다.')
         except Exception as e:
